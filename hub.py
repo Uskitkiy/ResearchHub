@@ -1,10 +1,10 @@
 """Local Flask/SQLite application. Existing tables and attachments are migrated in place."""
 
-import os, json, sqlite3, secrets, re, uuid
+import os, json, sqlite3, secrets, re, uuid, hashlib
 from pathlib import Path
 from datetime import datetime, timezone, timedelta
 from flask import Flask, request, session, jsonify, g, render_template, send_from_directory, abort
-from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.security import generate_password_hash as werkzeug_generate_password_hash, check_password_hash as werkzeug_check_password_hash
 from werkzeug.exceptions import HTTPException
 from legacy_schema import initialize_legacy
 
@@ -21,6 +21,15 @@ app.config.update(SECRET_KEY=os.environ.get('SECRET_KEY') or secret_file.read_te
     SESSION_COOKIE_SAMESITE='Lax', PERMANENT_SESSION_LIFETIME=timedelta(days=7))
 CONFIG = json.loads((ROOT / 'config.json').read_text(encoding='utf-8'))
 TYPES = {'work':'Работа','photo':'Фото','task':'Задача','idea':'Идея'}
+
+def generate_password_hash(password):
+    # Explicit portable method: some macOS Python builds have no hashlib.scrypt.
+    return werkzeug_generate_password_hash(password,method='pbkdf2:sha256:1000000')
+
+def check_password_hash(stored,password):
+    if stored.startswith('scrypt:') and not callable(getattr(hashlib,'scrypt',None)):
+        fail('Этот аккаунт использует scrypt, недоступный в текущей сборке Python. Запустите сайт в Python с поддержкой hashlib.scrypt. Пароль и данные аккаунта сохранены.',503)
+    return werkzeug_check_password_hash(stored,password)
 
 def now(): return datetime.now(timezone.utc).isoformat(timespec='seconds')
 def active_mute(user):

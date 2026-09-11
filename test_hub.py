@@ -31,7 +31,7 @@ class Scenarios(unittest.TestCase):
         self.assertGreaterEqual(len(self.guest.get('/api/subjects').json['subjects']),10)
         self.assertEqual(self.req(self.guest,'/api/posts',payload={}).status_code,401)
     def test_02_auth_password_sessions(self):
-        with sqlite3.connect(DB) as c:self.assertTrue(c.execute("SELECT password FROM users WHERE username='alice'").fetchone()[0].startswith('scrypt:'))
+        with sqlite3.connect(DB) as c:self.assertTrue(c.execute("SELECT password FROM users WHERE username='alice'").fetchone()[0].startswith('pbkdf2:sha256:1000000'))
         c=app.test_client();self.assertEqual(self.req(c,'/api/login',payload={'username':'alice','password':'wrong'}).status_code,401)
         self.assertEqual(self.req(c,'/api/login',payload={'username':'alice','password':'A-test-password-123'}).status_code,200)
         self.assertEqual(c.get('/api/session').json['user']['username'],'alice')
@@ -258,6 +258,43 @@ class Scenarios(unittest.TestCase):
         body=self.a.get(f'/api/posts/{p}').json['post'];body['section']='НоваяПодтемаДляПоиска'
         self.req(self.a,f'/api/posts/{p}','PUT',body)
         self.assertIn(p,[x['id'] for x in self.guest.get('/api/posts?q=новаяподтемадляпоиска').json['items']])
+
+    def test_23_missing_scrypt_registration_login_password_and_publication(self):
+        import hashlib
+        from unittest.mock import patch
+        with patch.object(hashlib,'scrypt',create=True):
+            del hashlib.scrypt
+            client=app.test_client()
+            body={'username':'portable_mac','password':'Portable-password-123'}
+            self.assertEqual(self.req(client,'/api/register',payload=body).status_code,201)
+            with sqlite3.connect(DB) as c:
+                encoded=c.execute("SELECT password FROM users WHERE username='portable_mac'").fetchone()[0]
+                self.assertTrue(encoded.startswith('pbkdf2:sha256:1000000$'))
+            self.req(client,'/api/logout')
+            self.assertEqual(self.req(client,'/api/login',payload={**body,'password':'wrong-password'}).status_code,401)
+            self.assertEqual(self.req(client,'/api/login',payload=body).status_code,200)
+            self.assertEqual(self.req(client,'/api/password',payload={'current_password':body['password'],'new_password':'Portable-new-password-123'}).status_code,200)
+            self.req(client,'/api/logout');body['password']='Portable-new-password-123'
+            self.assertEqual(self.req(client,'/api/login',payload=body).status_code,200)
+            post=dict(title='Статья с macOS',content='Проверка совместимости',subject_id=self.sid,topic_id=self.tid,kind='work',publication_status='published')
+            self.assertEqual(self.req(client,'/api/posts',payload=post).status_code,200)
+            migrate()
+            self.assertEqual(self.req(self.admin,'/api/admin/users/portable_mac','DELETE').status_code,200)
+
+    def test_24_existing_scrypt_hashes_preserved(self):
+        import hashlib
+        from unittest.mock import patch
+        from werkzeug.security import generate_password_hash
+        encoded=generate_password_hash('Existing-password-123',method='scrypt')
+        with sqlite3.connect(DB) as c:c.execute('INSERT INTO users(username,password,role) VALUES(?,?,?)',('old_scrypt',encoded,'user'))
+        client=app.test_client();body={'username':'old_scrypt','password':'Existing-password-123'}
+        self.assertEqual(self.req(client,'/api/login',payload=body).status_code,200)
+        self.req(client,'/api/logout')
+        with patch.object(hashlib,'scrypt',create=True):
+            del hashlib.scrypt
+            response=self.req(client,'/api/login',payload=body)
+            self.assertEqual(response.status_code,503);self.assertIn('scrypt',response.json['error'])
+        with sqlite3.connect(DB) as c:self.assertEqual(c.execute("SELECT password FROM users WHERE username='old_scrypt'").fetchone()[0],encoded)
 
 if __name__=='__main__':unittest.main(verbosity=2)
 
