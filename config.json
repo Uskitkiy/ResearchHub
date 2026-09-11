@@ -1,0 +1,5 @@
+{
+  "levels": [[0,"Новичок"],[100,"Участник"],[300,"Практик"],[700,"Опытный участник"],[1500,"Наставник сообщества"]],
+  "xp": {"profile": 10, "publication": 20, "collection": 10, "helpful": 2},
+  "daily_caps": {"publication": 60, "collection": 20, "helpful": 10}
+}

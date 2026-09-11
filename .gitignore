@@ -1,0 +1,39 @@
+# Окружение Python и кеш
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Пароли и ключ сессий
+.env
+.env.*
+!.env.example
+.session-secret
+
+# База данных и её рабочие файлы
+*.db
+*.db-*
+*.sqlite
+*.sqlite-*
+*.sqlite3
+*.sqlite3-*
+
+# Файлы пользователей и резервные копии
+uploads/
+backups/
+
+# Результаты тестов и журналы
+test-data-*/
+*.log
+
+# Настройки редакторов и Windows
+.idea/
+.vscode/
+Thumbs.db
+Desktop.ini
+
+# Зависимости дополнительных JS-тестов
+node_modules/
